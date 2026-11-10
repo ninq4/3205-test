@@ -1,0 +1,45 @@
+services:
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/orders
+      ORDERS_API_URL: http://orders-api:4000
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      orders-api:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: orders
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./scripts/create-test-db.sql:/docker-entrypoint-initdb.d/create-test-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d orders"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  # Внешний API заказов (поддерживается другой командой). Образ приложен к заданию: docker load -i orders-mock-*.tar.gz
+  orders-api:
+    image: orders-mock:3
+    ports:
+      - "4000:4000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
